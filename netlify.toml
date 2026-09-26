@@ -1,0 +1,16 @@
+[build]
+  publish = "public"
+  functions = "netlify/functions"
+
+[functions]
+  node_bundler = "esbuild"
+
+[[redirects]]
+  from = "/api/gerar-pix"
+  to = "/.netlify/functions/gerar-pix"
+  status = 200
+
+[[redirects]]
+  from = "/api/status-pix"
+  to = "/.netlify/functions/status-pix"
+  status = 200
