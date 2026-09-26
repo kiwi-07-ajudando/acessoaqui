@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gerador de Pix</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+  :root{
+    --bg:#0f1115; --card:#171a21; --border:#262b36; --text:#f2f3f5;
+    --muted:#9aa1ad; --accent:#00c471; --accent-dark:#00a35e; --danger:#ff5c5c;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
+    background:var(--bg); color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    padding:24px;
+  }
+  .card{
+    width:100%; max-width:440px; background:var(--card); border:1px solid var(--border);
+    border-radius:16px; padding:28px 24px; box-shadow:0 10px 30px rgba(0,0,0,.35);
+  }
+  h1{font-size:20px; margin:0 0 4px;}
+  .sub{color:var(--muted); font-size:13px; margin:0 0 22px;}
+  label{display:block; font-size:13px; color:var(--muted); margin:16px 0 8px;}
+  .valores{display:flex; gap:10px;}
+  .valor-btn{
+    flex:1; padding:14px 0; text-align:center; border-radius:10px; border:1px solid var(--border);
+    background:#1e222b; cursor:pointer; font-weight:600; font-size:15px; transition:.15s;
+  }
+  .valor-btn:hover{border-color:#3a4152;}
+  .valor-btn.ativo{border-color:var(--accent); background:rgba(0,196,113,.12); color:var(--accent);}
+  input{
+    width:100%; padding:12px 14px; border-radius:10px; border:1px solid var(--border);
+    background:#1e222b; color:var(--text); font-size:14px; outline:none;
+  }
+  input:focus{border-color:var(--accent);}
+  .btn{
+    width:100%; margin-top:22px; padding:14px 0; border:none; border-radius:10px;
+    background:var(--accent); color:#062012; font-weight:700; font-size:15px; cursor:pointer;
+  }
+  .btn:hover{background:var(--accent-dark);}
+  .btn:disabled{opacity:.6; cursor:not-allowed;}
+  .erro{
+    display:none; margin-top:14px; padding:10px 12px; border-radius:8px;
+    background:rgba(255,92,92,.12); border:1px solid rgba(255,92,92,.4); color:var(--danger); font-size:13px;
+  }
+  .resultado{display:none; text-align:center; margin-top:22px;}
+  .resultado #qrcode{display:inline-block; padding:12px; background:#fff; border-radius:12px;}
+  .copia-box{
+    display:flex; gap:8px; margin-top:16px; align-items:stretch;
+  }
+  .copia-box textarea{
+    flex:1; resize:none; height:52px; font-size:11px; padding:10px;
+    border-radius:10px; border:1px solid var(--border); background:#1e222b; color:var(--text);
+  }
+  .copia-box button{
+    padding:0 16px; border:none; border-radius:10px; background:#2a2f3a; color:var(--text);
+    cursor:pointer; font-size:13px; white-space:nowrap;
+  }
+  .copia-box button:hover{background:#353b48;}
+  .status{
+    margin-top:16px; font-size:13px; color:var(--muted);
+    display:flex; align-items:center; justify-content:center; gap:8px;
+  }
+  .dot{width:8px; height:8px; border-radius:50%; background:var(--muted);}
+  .status.pago{color:var(--accent);}
+  .status.pago .dot{background:var(--accent);}
+  .voltar{
+    display:none; margin-top:18px; background:none; border:none; color:var(--muted);
+    font-size:13px; text-decoration:underline; cursor:pointer;
+  }
+</style>
+</head>
+<body>
+
+<div class="card">
+  <h1>Pagamento via Pix</h1>
+  <p class="sub">Escolha o valor e gere o código Pix.</p>
+
+  <div id="form-area">
+    <label>Valor</label>
+    <div class="valores" id="valores">
+      <div class="valor-btn" data-valor="16.90">R$ 16,90</div>
+      <div class="valor-btn" data-valor="21.90">R$ 21,90</div>
+      <div class="valor-btn" data-valor="29.90">R$ 29,90</div>
+    </div>
+
+    <label for="nome">Nome completo</label>
+    <input id="nome" type="text" placeholder="Seu nome completo" autocomplete="name">
+
+    <label for="cpf">CPF</label>
+    <input id="cpf" type="text" placeholder="000.000.000-00" autocomplete="off" inputmode="numeric" maxlength="14">
+
+    <label for="email">E-mail (opcional)</label>
+    <input id="email" type="email" placeholder="seuemail@exemplo.com" autocomplete="email">
+
+    <button class="btn" id="gerar-btn">Gerar Pix</button>
+    <div class="erro" id="erro"></div>
+  </div>
+
+  <div class="resultado" id="resultado">
+    <div id="qrcode"></div>
+    <div class="copia-box">
+      <textarea id="pix-code" readonly></textarea>
+      <button id="copiar-btn">Copiar</button>
+    </div>
+    <div class="status" id="status"><span class="dot"></span><span id="status-texto">Aguardando pagamento…</span></div>
+    <button class="voltar" id="voltar-btn">← Gerar novo Pix</button>
+  </div>
+</div>
+
+<script>
+  const valoresEl = document.getElementById('valores');
+  const gerarBtn = document.getElementById('gerar-btn');
+  const erroEl = document.getElementById('erro');
+  const formArea = document.getElementById('form-area');
+  const resultadoEl = document.getElementById('resultado');
+  const qrcodeEl = document.getElementById('qrcode');
+  const pixCodeEl = document.getElementById('pix-code');
+  const copiarBtn = document.getElementById('copiar-btn');
+  const statusEl = document.getElementById('status');
+  const statusTextoEl = document.getElementById('status-texto');
+  const voltarBtn = document.getElementById('voltar-btn');
+
+  let valorSelecionado = null;
+  let pollTimer = null;
+
+  valoresEl.querySelectorAll('.valor-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      valoresEl.querySelectorAll('.valor-btn').forEach(b => b.classList.remove('ativo'));
+      btn.classList.add('ativo');
+      valorSelecionado = btn.dataset.valor;
+    });
+  });
+
+  document.getElementById('cpf').addEventListener('input', (e) => {
+    let v = e.target.value.replace(/\D/g, '').slice(0, 11);
+    v = v.replace(/(\d{3})(\d)/, '$1.$2');
+    v = v.replace(/(\d{3})(\d)/, '$1.$2');
+    v = v.replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+    e.target.value = v;
+  });
+
+  function mostrarErro(msg){
+    erroEl.textContent = msg;
+    erroEl.style.display = 'block';
+  }
+  function limparErro(){
+    erroEl.style.display = 'none';
+  }
+
+  gerarBtn.addEventListener('click', async () => {
+    limparErro();
+
+    const nome = document.getElementById('nome').value.trim();
+    const cpf = document.getElementById('cpf').value.replace(/\D/g, '');
+    const email = document.getElementById('email').value.trim();
+
+    if(!valorSelecionado){ mostrarErro('Escolha um valor.'); return; }
+    if(!nome){ mostrarErro('Informe o nome completo.'); return; }
+    if(cpf.length !== 11){ mostrarErro('CPF inválido.'); return; }
+
+    gerarBtn.disabled = true;
+    gerarBtn.textContent = 'Gerando…';
+
+    try{
+      const res = await fetch('/.netlify/functions/gerar-pix', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: Number(valorSelecionado),
+          client: { name: nome, cpf, email }
+        })
+      });
+      const data = await res.json();
+
+      if(!res.ok){
+        mostrarErro(data.error || 'Não foi possível gerar o Pix.');
+        gerarBtn.disabled = false;
+        gerarBtn.textContent = 'Gerar Pix';
+        return;
+      }
+
+      mostrarResultado(data.pix_code, data.identifier);
+    }catch(err){
+      mostrarErro('Erro de conexão. Tente novamente.');
+      gerarBtn.disabled = false;
+      gerarBtn.textContent = 'Gerar Pix';
+    }
+  });
+
+  function mostrarResultado(pixCode, identifier){
+    formArea.style.display = 'none';
+    resultadoEl.style.display = 'block';
+    voltarBtn.style.display = 'inline-block';
+
+    qrcodeEl.innerHTML = '';
+    new QRCode(qrcodeEl, { text: pixCode, width: 200, height: 200 });
+
+    pixCodeEl.value = pixCode;
+
+    if(identifier){
+      pollTimer = setInterval(() => checarStatus(identifier), 5000);
+      checarStatus(identifier);
+    }
+  }
+
+  async function checarStatus(identifier){
+    try{
+      const res = await fetch('/.netlify/functions/status-pix?id=' + encodeURIComponent(identifier));
+      const data = await res.json();
+      if(res.ok && (data.status === 'completed' || data.status === 'paid')){
+        statusEl.classList.add('pago');
+        statusTextoEl.textContent = 'Pagamento confirmado ✅';
+        clearInterval(pollTimer);
+      }
+    }catch(e){ /* silencioso, tenta de novo no próximo ciclo */ }
+  }
+
+  copiarBtn.addEventListener('click', () => {
+    pixCodeEl.select();
+    navigator.clipboard.writeText(pixCodeEl.value).then(() => {
+      copiarBtn.textContent = 'Copiado!';
+      setTimeout(() => copiarBtn.textContent = 'Copiar', 1500);
+    });
+  });
+
+  voltarBtn.addEventListener('click', () => {
+    clearInterval(pollTimer);
+    resultadoEl.style.display = 'none';
+    formArea.style.display = 'block';
+    voltarBtn.style.display = 'none';
+    gerarBtn.disabled = false;
+    gerarBtn.textContent = 'Gerar Pix';
+    statusEl.classList.remove('pago');
+    statusTextoEl.textContent = 'Aguardando pagamento…';
+  });
+</script>
+</body>
+</html>
